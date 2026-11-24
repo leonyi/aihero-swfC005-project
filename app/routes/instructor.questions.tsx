@@ -182,6 +182,11 @@ export async function action({ request }: Route.ActionArgs) {
     new Date()
   );
   if (!created.ok) {
+    // A bad reply is the Instructor's to fix; a missing lesson or question
+    // can't be fixed from the form, so it fails the action.
+    if (created.status !== 400) {
+      throw data(created.error, { status: created.status });
+    }
     return { ok: false, error: created.error };
   }
 

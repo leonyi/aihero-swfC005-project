@@ -861,6 +861,11 @@ export async function action({ params, request }: Route.ActionArgs) {
           new Date()
         );
         if (!created.ok) {
+          // A bad comment is the poster's to fix; a missing lesson or parent
+          // can't be fixed from the form, so it fails the action.
+          if (created.status !== 400) {
+            throw data(created.error, { status: created.status });
+          }
           return { ok: false, error: created.error };
         }
         return { ok: true };
@@ -895,15 +900,12 @@ export async function action({ params, request }: Route.ActionArgs) {
         new Date()
       );
       if (!deleted.ok) {
-        if (deleted.status === 404) {
-          throw data(deleted.error, { status: 404 });
-        }
-        return { ok: false, error: deleted.error };
+        throw data(deleted.error, { status: deleted.status });
       }
       return { ok: true };
     } catch (error) {
       // Service validation failures are user-correctable; anything thrown as a
-      // Response (404 above) should keep bubbling.
+      // Response (404 and 403 above) should keep bubbling.
       if (error instanceof Error) {
         return { ok: false, error: error.message };
       }
