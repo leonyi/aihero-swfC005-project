@@ -3,6 +3,7 @@ import { createTestDb, seedBaseData } from "~/test/setup";
 import * as schema from "~/db/schema";
 import { UserRole } from "~/db/schema";
 import { approveRefundRequest, raiseRefundRequest } from "./refunds.server";
+import { createFakeNotificationPort } from "./notifications.fake";
 import { buyCourse, buyTeamLicence } from "./purchases.server";
 
 type TestDb = ReturnType<typeof createTestDb>;
@@ -18,7 +19,7 @@ beforeEach(() => {
 });
 
 describe("buyCourse", () => {
-  it("records an Individual Purchase and enrols the buyer", () => {
+  it("records an Individual Purchase and enrols the buyer", async () => {
     const result = buyCourse(db, base.user.id, base.course.id, 4900, "US", NOW);
 
     expect(result).toMatchObject({
@@ -38,7 +39,7 @@ describe("buyCourse", () => {
     });
   });
 
-  it("refuses someone who is already enrolled", () => {
+  it("refuses someone who is already enrolled", async () => {
     buyCourse(db, base.user.id, base.course.id, 4900, null, NOW);
 
     expect(
@@ -46,7 +47,7 @@ describe("buyCourse", () => {
     ).toEqual({ ok: false, reason: "already_enrolled" });
   });
 
-  it("enrols a Lapsed Student again when they buy the course again", () => {
+  it("enrols a Lapsed Student again when they buy the course again", async () => {
     const first = buyCourse(db, base.user.id, base.course.id, 4900, null, NOW);
     if (!first.ok) throw new Error("first purchase failed");
 
@@ -55,15 +56,16 @@ describe("buyCourse", () => {
       .values({ name: "Pat", email: "pat@example.com", role: UserRole.Admin })
       .returning()
       .get();
-    const raised = raiseRefundRequest(
+    const raised = await raiseRefundRequest(
       db,
+      createFakeNotificationPort(),
       first.purchase.id,
       base.user.id,
       "Not for me after all",
       NOW
     );
     if (!raised.ok) throw new Error(raised.error);
-    approveRefundRequest(db, raised.refundRequestId, platformAdmin.id, null, NOW);
+    await approveRefundRequest(db, createFakeNotificationPort(), raised.refundRequestId, platformAdmin.id, null, NOW);
 
     const later = new Date(2026, 9, 20, 12, 0, 0);
     const again = buyCourse(db, base.user.id, base.course.id, 4900, null, later);
@@ -77,7 +79,7 @@ describe("buyCourse", () => {
 });
 
 describe("buyTeamLicence", () => {
-  it("records a Team Licence with one Seat per place and makes the buyer its Team Admin", () => {
+  it("records a Team Licence with one Seat per place and makes the buyer its Team Admin", async () => {
     const result = buyTeamLicence(
       db,
       base.user.id,
@@ -102,7 +104,7 @@ describe("buyTeamLicence", () => {
     });
   });
 
-  it("does not enrol the buyer, so they can still buy the course for themselves", () => {
+  it("does not enrol the buyer, so they can still buy the course for themselves", async () => {
     buyTeamLicence(db, base.user.id, base.course.id, 4900, null, 1, NOW);
 
     expect(
@@ -110,7 +112,7 @@ describe("buyTeamLicence", () => {
     ).toMatchObject({ ok: true });
   });
 
-  it("reuses the buyer's team for a second Team Licence", () => {
+  it("reuses the buyer's team for a second Team Licence", async () => {
     const first = buyTeamLicence(db, base.user.id, base.course.id, 4900, null, 1, NOW);
     const second = buyTeamLicence(db, base.user.id, base.course.id, 4900, null, 1, NOW);
 

@@ -4,6 +4,7 @@ import * as schema from "~/db/schema";
 import { UserRole } from "~/db/schema";
 import { buyCourse, buyTeamLicence } from "./purchases.server";
 import { approveRefundRequest, raiseRefundRequest } from "./refunds.server";
+import { createFakeNotificationPort } from "./notifications.fake";
 import { claimSeat, SEAT_ON_HOLD, SEAT_REFUNDED } from "./seats.server";
 
 type TestDb = ReturnType<typeof createTestDb>;
@@ -41,7 +42,7 @@ function buySeats(seatCount = 2, country: string | null = "US") {
 }
 
 describe("claimSeat", () => {
-  it("claims an Unclaimed Seat and enrols the person claiming it", () => {
+  it("claims an Unclaimed Seat and enrols the person claiming it", async () => {
     const { seats } = buySeats();
 
     const result = claimSeat(db, seats[0].code, base.user.id, "US", NOW);
@@ -61,14 +62,14 @@ describe("claimSeat", () => {
     });
   });
 
-  it("refuses a code that matches no Seat", () => {
+  it("refuses a code that matches no Seat", async () => {
     expect(claimSeat(db, "nope", base.user.id, "US", NOW)).toEqual({
       ok: false,
       error: "Coupon not found",
     });
   });
 
-  it("refuses a Claimed Seat", () => {
+  it("refuses a Claimed Seat", async () => {
     const { seats } = buySeats();
     claimSeat(db, seats[0].code, base.user.id, "US", NOW);
 
@@ -77,9 +78,9 @@ describe("claimSeat", () => {
     ).toEqual({ ok: false, error: "Coupon has already been redeemed" });
   });
 
-  it("refuses a Seat on hold while its Team Licence has an Open Refund Request", () => {
+  it("refuses a Seat on hold while its Team Licence has an Open Refund Request", async () => {
     const { purchase, seats } = buySeats();
-    raiseRefundRequest(db, purchase.id, teamAdmin.id, "Team changed plans", NOW);
+    await raiseRefundRequest(db, createFakeNotificationPort(), purchase.id, teamAdmin.id, "Team changed plans", NOW);
 
     expect(claimSeat(db, seats[0].code, base.user.id, "US", NOW)).toEqual({
       ok: false,
@@ -87,18 +88,19 @@ describe("claimSeat", () => {
     });
   });
 
-  it("refuses a Seat whose Team Licence was refunded", () => {
+  it("refuses a Seat whose Team Licence was refunded", async () => {
     const { purchase, seats } = buySeats();
     const platformAdmin = addPerson("Pat", UserRole.Admin);
-    const raised = raiseRefundRequest(
+    const raised = await raiseRefundRequest(
       db,
+      createFakeNotificationPort(),
       purchase.id,
       teamAdmin.id,
       "Team changed plans",
       NOW
     );
     if (!raised.ok) throw new Error(raised.error);
-    approveRefundRequest(db, raised.refundRequestId, platformAdmin.id, null, NOW);
+    await approveRefundRequest(db, createFakeNotificationPort(), raised.refundRequestId, platformAdmin.id, null, NOW);
 
     expect(claimSeat(db, seats[0].code, base.user.id, "US", NOW)).toEqual({
       ok: false,
@@ -106,7 +108,7 @@ describe("claimSeat", () => {
     });
   });
 
-  it("refuses someone already enrolled on the course, leaving the Seat unclaimed", () => {
+  it("refuses someone already enrolled on the course, leaving the Seat unclaimed", async () => {
     const { seats } = buySeats();
     buyCourse(db, base.user.id, base.course.id, 4900, "US", NOW);
 
@@ -119,7 +121,7 @@ describe("claimSeat", () => {
     ).toMatchObject({ ok: true });
   });
 
-  it("refuses a claim from a different country than the Team Licence was bought in", () => {
+  it("refuses a claim from a different country than the Team Licence was bought in", async () => {
     const { seats } = buySeats(2, "US");
 
     expect(claimSeat(db, seats[0].code, base.user.id, "IN", NOW)).toEqual({
@@ -129,7 +131,7 @@ describe("claimSeat", () => {
     });
   });
 
-  it("lets anyone claim a Seat on a Team Licence bought with no country", () => {
+  it("lets anyone claim a Seat on a Team Licence bought with no country", async () => {
     const { seats } = buySeats(2, null);
 
     expect(
