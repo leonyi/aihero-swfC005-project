@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { FeedItem } from "@knocklabs/client";
-import {
-  FEED_WORKFLOW_KEYS,
-  fromKnockFeedItem,
-} from "~/lib/notification-feed-knock";
-import { KNOCK_WORKFLOWS } from "~/lib/notifications-knock.server";
+import { fromKnockFeedItem } from "~/lib/notification-feed-knock";
 
 function knockItem(overrides: Partial<FeedItem>): FeedItem {
   return {
@@ -83,13 +79,5 @@ describe("fromKnockFeedItem", () => {
       )
     ).toBeNull();
     expect(fromKnockFeedItem(knockItem({ data: { snippet: "only this" } }))).toBeNull();
-  });
-});
-
-describe("FEED_WORKFLOW_KEYS", () => {
-  it("matches the workflow keys the server triggers", () => {
-    for (const [kind, { key }] of Object.entries(KNOCK_WORKFLOWS)) {
-      expect(FEED_WORKFLOW_KEYS[kind as keyof typeof KNOCK_WORKFLOWS]).toBe(key);
-    }
   });
 });

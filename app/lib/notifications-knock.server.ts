@@ -10,35 +10,12 @@ import {
   type PreferenceCategory,
   type PreferenceSet,
 } from "~/lib/notifications.server";
+import { KNOCK_WORKFLOWS } from "~/lib/knock-workflows";
 
 // ─── Knock adapter ───
 // The only code that talks to Knock. It maps Cadence's Notification kinds,
 // preference categories and channels to Knock's workflow, category and channel
 // type keys. Knock user ids are Cadence user ids as strings.
-
-/** Each kind's Knock workflow key and display name. */
-export const KNOCK_WORKFLOWS: Record<
-  NotificationKind,
-  { key: string; name: string }
-> = {
-  "refund-request-confirmed": {
-    key: "refund-request-confirmed",
-    name: "Refund Request confirmation",
-  },
-  "refund-request-approved": {
-    key: "refund-request-approved",
-    name: "Refund Request approved",
-  },
-  "refund-request-declined": {
-    key: "refund-request-declined",
-    name: "Refund Request declined",
-  },
-  "open-refund-request": { key: "open-refund-request", name: "Open Refund Request" },
-  "seat-claimed": { key: "seat-claimed", name: "Seat claimed" },
-  "new-enrollment": { key: "new-enrollment", name: "New Enrollment" },
-  "discussion-question": { key: "discussion-question", name: "Discussion Question" },
-  "discussion-reply": { key: "discussion-reply", name: "Discussion Reply" },
-};
 
 /**
  * Knock category keys. `enrollment` matches the category the Knock prototype

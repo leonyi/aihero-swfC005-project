@@ -9,6 +9,7 @@ import type {
   NotificationDataByKind,
   NotificationKind,
 } from "~/lib/notifications.server";
+import { KNOCK_WORKFLOWS } from "~/lib/knock-workflows";
 
 // ─── Knock adapter for the Notification Feed (browser) ───
 // The only browser code that talks to Knock. It reads the person's feed with
@@ -17,25 +18,9 @@ import type {
 
 const PAGE_SIZE = 20;
 
-/**
- * The Knock workflow each kind is sent through. Must match the server
- * adapter's KNOCK_WORKFLOWS (a test checks); duplicated because that module
- * is server-only.
- */
-export const FEED_WORKFLOW_KEYS: Record<NotificationKind, string> = {
-  "refund-request-confirmed": "refund-request-confirmed",
-  "refund-request-approved": "refund-request-approved",
-  "refund-request-declined": "refund-request-declined",
-  "open-refund-request": "open-refund-request",
-  "seat-claimed": "seat-claimed",
-  "new-enrollment": "new-enrollment",
-  "discussion-question": "discussion-question",
-  "discussion-reply": "discussion-reply",
-};
-
 const KIND_BY_WORKFLOW = new Map(
-  (Object.keys(FEED_WORKFLOW_KEYS) as NotificationKind[]).map((kind) => [
-    FEED_WORKFLOW_KEYS[kind],
+  (Object.keys(KNOCK_WORKFLOWS) as NotificationKind[]).map((kind) => [
+    KNOCK_WORKFLOWS[kind].key,
     kind,
   ])
 );
