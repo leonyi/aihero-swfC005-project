@@ -58,6 +58,14 @@ function post(
   );
 }
 
+function addStudent(name: string, email: string) {
+  return db
+    .insert(schema.users)
+    .values({ name, email, role: schema.UserRole.Student })
+    .returning()
+    .get();
+}
+
 async function postQuestion(authorId = base.user.id, onLesson = lessonId) {
   const result = await post(authorId, onLesson, null, "A question");
   if (!result.ok) throw new Error(result.error);
@@ -142,8 +150,9 @@ describe("deleteComment", () => {
   it("lets the author soft-delete their own comment, stamped with now", async () => {
     const question = await postQuestion();
 
-    const result = deleteComment(
+    const result = await deleteComment(
       db,
+      notifications,
       question.id,
       lessonId,
       base.user.id,
@@ -160,8 +169,9 @@ describe("deleteComment", () => {
   it("lets staff delete someone else's comment", async () => {
     const question = await postQuestion();
 
-    const result = deleteComment(
+    const result = await deleteComment(
       db,
+      notifications,
       question.id,
       lessonId,
       base.instructor.id,
@@ -176,7 +186,7 @@ describe("deleteComment", () => {
     const question = await postQuestion(base.instructor.id);
 
     expect(
-      deleteComment(db, question.id, lessonId, base.user.id, false, NOW)
+      await deleteComment(db, notifications, question.id, lessonId, base.user.id, false, NOW)
     ).toEqual({
       ok: false,
       status: 403,
@@ -188,17 +198,18 @@ describe("deleteComment", () => {
     const question = await postQuestion(base.user.id, otherLessonId);
 
     expect(
-      deleteComment(db, question.id, lessonId, base.user.id, false, NOW)
+      await deleteComment(db, notifications, question.id, lessonId, base.user.id, false, NOW)
     ).toEqual({ ok: false, status: 404, error: "Comment not found" });
   });
 
   it("keeps the first deletion time when a comment is deleted twice", async () => {
     const question = await postQuestion();
-    deleteComment(db, question.id, lessonId, base.user.id, false, NOW);
+    await deleteComment(db, notifications, question.id, lessonId, base.user.id, false, NOW);
 
     const later = new Date(NOW.getTime() + 60_000);
-    const result = deleteComment(
+    const result = await deleteComment(
       db,
+      notifications,
       question.id,
       lessonId,
       base.user.id,
@@ -315,6 +326,161 @@ describe("Discussion Question Notification", () => {
     expect(result).toMatchObject({ ok: true, comment: { body: "Is anyone there?" } });
     const saved = db.select().from(schema.comments).all();
     expect(saved).toHaveLength(1);
+    expect(logged).toHaveBeenCalled();
+    logged.mockRestore();
+  });
+});
+
+describe("Discussion Reply Notification", () => {
+  async function reply(authorId: number, questionId: number, body: string) {
+    const result = await post(authorId, lessonId, questionId, body);
+    if (!result.ok) throw new Error(result.error);
+    return result.comment;
+  }
+
+  it("notifies the question's author, with the replier as sender", async () => {
+    const question = await postQuestion();
+    notifications.triggered.length = 0;
+
+    const answer = await reply(base.instructor.id, question.id, "Run npm install.");
+
+    expect(notifications.triggered).toEqual([
+      {
+        kind: "discussion-reply",
+        recipients: [
+          {
+            id: base.user.id,
+            name: "Test User",
+            email: "test@example.com",
+            avatarUrl: null,
+          },
+        ],
+        actor: {
+          id: base.instructor.id,
+          name: "Test Instructor",
+          email: "instructor@example.com",
+          avatarUrl: null,
+        },
+        data: {
+          courseTitle: "Test Course",
+          lessonTitle: "Lesson 1",
+          snippet: "Run npm install.",
+          url: `/courses/test-course/lessons/${lessonId}#comment-${answer.id}`,
+          commentId: answer.id,
+        },
+        idempotencyKey: `discussion-reply:${answer.id}`,
+      },
+    ]);
+  });
+
+  it("sends nothing when the author replies in their own thread", async () => {
+    const question = await postQuestion();
+    notifications.triggered.length = 0;
+
+    await reply(base.user.id, question.id, "Never mind, solved it.");
+
+    expect(notifications.triggered).toEqual([]);
+  });
+
+  it("notifies only the author, never other people in the thread", async () => {
+    const question = await postQuestion();
+    const alice = addStudent("Alice", "alice@example.com");
+    const bob = addStudent("Bob", "bob@example.com");
+    await reply(alice.id, question.id, "Same problem here.");
+    notifications.triggered.length = 0;
+
+    await reply(bob.id, question.id, "Try restarting.");
+
+    expect(notifications.triggered).toHaveLength(1);
+    expect(notifications.triggered[0]).toMatchObject({
+      kind: "discussion-reply",
+      recipients: [{ id: base.user.id }],
+      actor: { id: bob.id },
+    });
+    expect(notifications.triggered[0]?.recipients).toHaveLength(1);
+  });
+
+  it("keeps the reply posted when the Notification fails", async () => {
+    const question = await postQuestion();
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const result = await createComment(
+      db,
+      createFailingNotificationPort(),
+      base.instructor.id,
+      lessonId,
+      question.id,
+      "Here's the answer.",
+      NOW
+    );
+
+    expect(result).toMatchObject({ ok: true, comment: { parentId: question.id } });
+    expect(db.select().from(schema.comments).all()).toHaveLength(2);
+    expect(logged).toHaveBeenCalled();
+    logged.mockRestore();
+  });
+});
+
+describe("archiving Notifications on delete", () => {
+  it("archives a deleted Discussion Question's own Notification", async () => {
+    const question = await postQuestion();
+
+    await deleteComment(db, notifications, question.id, lessonId, base.user.id, false, NOW);
+
+    expect(notifications.archivedCommentIds).toEqual([question.id]);
+  });
+
+  it("archives a deleted Discussion Reply's own Notification", async () => {
+    const question = await postQuestion();
+    const answer = await post(base.instructor.id, lessonId, question.id, "Answer");
+    if (!answer.ok) throw new Error(answer.error);
+
+    await deleteComment(
+      db,
+      notifications,
+      answer.comment.id,
+      lessonId,
+      base.instructor.id,
+      true,
+      NOW
+    );
+
+    expect(notifications.archivedCommentIds).toEqual([answer.comment.id]);
+  });
+
+  it("leaves the Reply Notifications under a deleted question in place", async () => {
+    const question = await postQuestion();
+    const answer = await post(base.instructor.id, lessonId, question.id, "Answer");
+    if (!answer.ok) throw new Error(answer.error);
+
+    await deleteComment(db, notifications, question.id, lessonId, base.user.id, false, NOW);
+
+    expect(notifications.archivedCommentIds).not.toContain(answer.comment.id);
+  });
+
+  it("archives nothing when the delete is refused", async () => {
+    const question = await postQuestion(base.instructor.id);
+
+    await deleteComment(db, notifications, question.id, lessonId, base.user.id, false, NOW);
+
+    expect(notifications.archivedCommentIds).toEqual([]);
+  });
+
+  it("keeps the comment deleted when archiving fails", async () => {
+    const question = await postQuestion();
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const result = await deleteComment(
+      db,
+      createFailingNotificationPort(),
+      question.id,
+      lessonId,
+      base.user.id,
+      false,
+      NOW
+    );
+
+    expect(result).toMatchObject({ ok: true, comment: { deletedAt: NOW.toISOString() } });
     expect(logged).toHaveBeenCalled();
     logged.mockRestore();
   });
