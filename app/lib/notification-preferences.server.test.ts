@@ -78,8 +78,6 @@ describe("listPreferenceSwitches", () => {
     expect(await visibleLabels(teamAdmin.id)).toEqual([
       "Refund Request updates",
       "Seat claims",
-      "Enrollments",
-      "Discussion Questions",
       "Discussion Replies",
     ]);
   });
@@ -99,6 +97,40 @@ describe("listPreferenceSwitches", () => {
 
   it("shows an Instructor Enrollments and Discussion Questions", async () => {
     expect(await visibleLabels(base.instructor.id)).toEqual([
+      "Enrollments",
+      "Discussion Questions",
+      "Discussion Replies",
+    ]);
+  });
+
+  it("doesn't count the Instructor role alone as being an Instructor", async () => {
+    const withoutCourse = db
+      .insert(schema.users)
+      .values({
+        name: "No Course",
+        email: "no-course@example.com",
+        role: schema.UserRole.Instructor,
+      })
+      .returning()
+      .get();
+
+    expect(await visibleLabels(withoutCourse.id)).toEqual(["Discussion Replies"]);
+  });
+
+  it("counts anyone who owns a course as an Instructor, whatever their role", async () => {
+    db.insert(schema.courses)
+      .values({
+        title: "Student-run Course",
+        slug: "student-run-course",
+        description: "A course owned by someone with the Student role",
+        salesCopy: "Sales copy",
+        status: schema.CourseStatus.Draft,
+        instructorId: base.user.id,
+        categoryId: base.category.id,
+      })
+      .run();
+
+    expect(await visibleLabels(base.user.id)).toEqual([
       "Enrollments",
       "Discussion Questions",
       "Discussion Replies",

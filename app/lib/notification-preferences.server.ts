@@ -3,6 +3,7 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "~/db/schema";
 import {
   coupons,
+  courses,
   purchases,
   TeamMemberRole,
   teamMembers,
@@ -61,7 +62,14 @@ function applicableCategories(db: Db, userId: number): PreferenceCategory[] {
       .limit(1)
       .get() !== undefined;
 
-  const isInstructor = user.role === UserRole.Instructor;
+  // An Instructor is someone who owns a course, whatever their UserRole.
+  const isInstructor =
+    db
+      .select({ id: courses.id })
+      .from(courses)
+      .where(eq(courses.instructorId, userId))
+      .limit(1)
+      .get() !== undefined;
 
   const applies: Record<PreferenceCategory, boolean> = {
     "refund-request-updates": hasPurchase,
