@@ -106,6 +106,20 @@ describe("Knock preferences", () => {
     });
   });
 
+  it("turning a category off targets the category its workflows are filed under", () => {
+    // Knock skips the in-app feed step for a recipient whose preference set
+    // has that workflow's category × in_app_feed off (verified live in #20).
+    const definitions = knockWorkflowDefinitions("cadence-feed");
+    const discussionReply = definitions.find((d) => d.key === "discussion-reply");
+
+    const write = toKnockPreferences({ "discussion-replies": { feed: false } });
+
+    expect(discussionReply?.workflow.categories).toEqual(Object.keys(write));
+    expect(write).toEqual({
+      discussion_replies: { channel_types: { in_app_feed: false } },
+    });
+  });
+
   it("treats a set with no categories as no preferences yet", () => {
     expect(fromKnockPreferences({ id: "default", categories: null })).toBeNull();
     expect(fromKnockPreferences({ id: "default", categories: {} })).toBeNull();
