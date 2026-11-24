@@ -10,14 +10,17 @@ import {
   teams,
   TeamMemberRole,
 } from "~/db/schema";
+import { notifyNewEnrollment } from "~/lib/enrollment-notifications.server";
+import type { NotificationPort } from "~/lib/notifications.server";
 
 // ─── Purchases ───
 // Buying a course: an Individual Purchase, which enrols the buyer, or a Team
 // Licence, which grants Seats and enrols nobody.
 //
 // Every function takes the database first and `now` last, so tests can hand in
-// an in-memory database and a fixed clock. Positional parameters (project
-// convention).
+// an in-memory database and a fixed clock. Functions that send Notifications
+// take the NotificationPort right after the database. Positional parameters
+// (project convention).
 
 type Db = BetterSQLite3Database<typeof schema>;
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
@@ -46,17 +49,19 @@ function isEnrolled(db: Queryable, userId: number, courseId: number) {
  * Records an Individual Purchase and gives the buyer an Enrollment. A Lapsed
  * Student — one who lost their Enrollment, say to an approved Refund Request —
  * buys again through here and is enrolled again. Someone already enrolled
- * can't buy the course a second time.
+ * can't buy the course a second time. The course's Instructor gets a New
+ * Enrollment Notification.
  */
-export function buyCourse(
+export async function buyCourse(
   db: Db,
+  notifications: NotificationPort,
   buyerId: number,
   courseId: number,
   amountPaid: number,
   country: string | null,
   now: Date
-): BuyCourseResult {
-  return db.transaction((tx): BuyCourseResult => {
+): Promise<BuyCourseResult> {
+  const result = db.transaction((tx): BuyCourseResult => {
     if (isEnrolled(tx, buyerId, courseId)) {
       return { ok: false, reason: "already_enrolled" };
     }
@@ -81,6 +86,11 @@ export function buyCourse(
 
     return { ok: true, purchase, enrollment };
   });
+
+  if (result.ok) {
+    await notifyNewEnrollment(db, notifications, result.enrollment);
+  }
+  return result;
 }
 
 function getOrCreateTeamFor(db: Queryable, teamAdminId: number): Team {
