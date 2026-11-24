@@ -885,8 +885,9 @@ export async function action({ params, request }: Route.ActionArgs) {
       if (!parsed.success) {
         return { ok: false, error: "Could not delete that comment." };
       }
-      const deleted = deleteComment(
+      const deleted = await deleteComment(
         db,
+        getNotificationPort(),
         parsed.data.commentId,
         lessonId,
         currentUserId,

@@ -4,6 +4,7 @@ import * as schema from "~/db/schema";
 import { comments, courses, lessons, modules, users } from "~/db/schema";
 import { MAX_COMMENT_LENGTH, MIN_COMMENT_LENGTH } from "~/lib/comments";
 import {
+  bestEffort,
   notify,
   snippetOf,
   type NotificationPort,
@@ -73,7 +74,8 @@ function getNotificationUser(
 /**
  * Posts a comment on a lesson: a Discussion Question when `parentId` is null,
  * otherwise a Discussion Reply to the top-level comment it names. A Discussion
- * Question notifies the course's Instructor, unless the Instructor asked it.
+ * Question notifies the course's Instructor, unless the Instructor asked it; a
+ * Discussion Reply notifies the question's author, unless the author replied.
  */
 export async function createComment(
   db: Db,
@@ -101,8 +103,9 @@ export async function createComment(
     return { ok: false, status: 404, error: "Lesson not found" };
   }
 
+  let parent: Comment | undefined;
   if (parentId !== null) {
-    const parent = getCommentById(db, parentId);
+    parent = getCommentById(db, parentId);
     if (!parent) {
       return { ok: false, status: 404, error: "Parent comment not found" };
     }
@@ -134,7 +137,9 @@ export async function createComment(
     .returning()
     .get();
 
-  if (parentId === null) {
+  if (parent) {
+    await notifyDiscussionReply(db, notifications, comment, parent, lesson);
+  } else {
     await notifyDiscussionQuestion(db, notifications, comment, lesson);
   }
 
@@ -157,15 +162,45 @@ async function notifyDiscussionQuestion(
     kind: "discussion-question",
     recipients: [instructor],
     actor: asker,
-    data: {
-      courseTitle: lesson.courseTitle,
-      lessonTitle: lesson.lessonTitle,
-      snippet: snippetOf(question.body),
-      url: `/courses/${lesson.courseSlug}/lessons/${question.lessonId}#comment-${question.id}`,
-      commentId: question.id,
-    },
+    data: discussionData(question, lesson),
     idempotencyKey: `discussion-question:${question.id}`,
   });
+}
+
+/**
+ * Discussion Reply → the question's author, unless they replied themselves.
+ * Nobody else in the thread hears about it.
+ */
+async function notifyDiscussionReply(
+  db: Db,
+  notifications: NotificationPort,
+  reply: Comment,
+  question: Comment,
+  lesson: LessonWithCourse
+) {
+  if (reply.userId === question.userId) return;
+  const asker = getNotificationUser(db, question.userId);
+  const replier = getNotificationUser(db, reply.userId);
+  if (!asker || !replier) return;
+
+  await notify(notifications, {
+    kind: "discussion-reply",
+    recipients: [asker],
+    actor: replier,
+    data: discussionData(reply, lesson),
+    idempotencyKey: `discussion-reply:${reply.id}`,
+  });
+}
+
+/** The row data for the Notification a comment caused. */
+function discussionData(comment: Comment, lesson: LessonWithCourse) {
+  return {
+    courseTitle: lesson.courseTitle,
+    lessonTitle: lesson.lessonTitle,
+    snippet: snippetOf(comment.body),
+    url: `/courses/${lesson.courseSlug}/lessons/${comment.lessonId}#comment-${comment.id}`,
+    commentId: comment.id,
+  };
 }
 
 /**
@@ -173,15 +208,21 @@ async function notifyDiscussionQuestion(
  * (the course's Instructor or a Platform Admin) may delete anyone's. A comment
  * on a different lesson is treated as not found, so a route can't reach a
  * comment elsewhere by posting its id. Deleting twice keeps the first time.
+ *
+ * Archives the Notification the comment caused (a Discussion Question's to the
+ * Instructor, or a Discussion Reply's to the question's author). Deleting a
+ * question leaves the Reply Notifications under it, since the replies still
+ * show.
  */
-export function deleteComment(
+export async function deleteComment(
   db: Db,
+  notifications: NotificationPort,
   commentId: number,
   lessonId: number,
   actorId: number,
   isStaff: boolean,
   now: Date
-): CommentResult {
+): Promise<CommentResult> {
   const existing = getCommentById(db, commentId);
   if (!existing || existing.lessonId !== lessonId) {
     return { ok: false, status: 404, error: "Comment not found" };
@@ -203,6 +244,10 @@ export function deleteComment(
     .where(eq(comments.id, commentId))
     .returning()
     .get();
+
+  await bestEffort(`archive Notifications for comment ${commentId}`, () =>
+    notifications.archiveForComment(commentId)
+  );
 
   return { ok: true, comment };
 }
