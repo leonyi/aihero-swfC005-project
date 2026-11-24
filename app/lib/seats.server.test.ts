@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { createTestDb, seedBaseData } from "~/test/setup";
+import { createTestDb, seedBaseData, withFailingReads } from "~/test/setup";
 import * as schema from "~/db/schema";
 import { UserRole } from "~/db/schema";
 import { buyCourse, buyTeamLicence } from "./purchases.server";
@@ -254,6 +254,28 @@ describe("Notifications on a Seat claim", () => {
       seat: { redeemedByUserId: base.user.id },
     });
     expect(db.select().from(schema.enrollments).all()).toHaveLength(1);
+    expect(logged).toHaveBeenCalled();
+    logged.mockRestore();
+  });
+
+  it("keeps the claim when looking up the Notifications' data fails", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { seats } = buySeats();
+
+    const result = await claimSeat(
+      withFailingReads(db),
+      notifications,
+      seats[0].code,
+      base.user.id,
+      "US",
+      NOW
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      seat: { redeemedByUserId: base.user.id },
+    });
+    expect(notifications.triggered).toEqual([]);
     expect(logged).toHaveBeenCalled();
     logged.mockRestore();
   });

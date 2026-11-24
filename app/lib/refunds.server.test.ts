@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { and, eq } from "drizzle-orm";
-import { createTestDb, seedBaseData } from "~/test/setup";
+import { createTestDb, seedBaseData, withFailingReads } from "~/test/setup";
 import * as schema from "~/db/schema";
 import { LessonProgressStatus, RefundStatus, UserRole } from "~/db/schema";
 import {
@@ -689,6 +689,26 @@ describe("Refund Request Notifications", () => {
     expect(
       db.select({ status: schema.refunds.status }).from(schema.refunds).all()
     ).toEqual([{ status: RefundStatus.Approved }, { status: RefundStatus.Declined }]);
+    expect(logged).toHaveBeenCalled();
+    logged.mockRestore();
+  });
+
+  it("approves and declines even when looking up the Notification's data fails", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    const first = buyForSelf(base.user.id);
+    const ben = addLearner("Ben");
+    const second = buyForSelf(ben.id);
+    const firstId = await raise(first.id, base.user.id);
+    const secondId = await raise(second.id, ben.id);
+    notifications.triggered.length = 0;
+    const failingReads = withFailingReads(db);
+
+    const approved = await approveRefundRequest(failingReads, notifications, firstId, platformAdmin.id, null, NOW);
+    const declined = await declineRefundRequest(failingReads, notifications, secondId, platformAdmin.id, "No.", NOW);
+
+    expect(approved).toMatchObject({ ok: true });
+    expect(declined).toMatchObject({ ok: true });
+    expect(notifications.triggered).toEqual([]);
     expect(logged).toHaveBeenCalled();
     logged.mockRestore();
   });

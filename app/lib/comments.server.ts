@@ -121,11 +121,12 @@ export async function createComment(
     .returning()
     .get();
 
-  if (parent) {
-    await notifyDiscussionReply(db, notifications, comment, parent, lesson);
-  } else {
-    await notifyDiscussionQuestion(db, notifications, comment, lesson);
-  }
+  const question = parent;
+  await bestEffort(`notify comment ${comment.id}`, () =>
+    question
+      ? notifyDiscussionReply(db, notifications, comment, question, lesson)
+      : notifyDiscussionQuestion(db, notifications, comment, lesson)
+  );
 
   return { ok: true, comment };
 }

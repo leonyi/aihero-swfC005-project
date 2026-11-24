@@ -4,6 +4,7 @@ import * as schema from "~/db/schema";
 import { coupons, courses, enrollments, purchases } from "~/db/schema";
 import { notifyNewEnrollment } from "~/lib/enrollment-notifications.server";
 import {
+  bestEffort,
   getNotificationUser,
   notify,
   type NotificationPort,
@@ -116,7 +117,10 @@ export async function claimSeat(
   });
 
   if (result.ok) {
-    await notifySeatClaimed(db, notifications, result.seat);
+    const { seat } = result;
+    await bestEffort(`notify Seat ${seat.id} claimed`, () =>
+      notifySeatClaimed(db, notifications, seat)
+    );
     await notifyNewEnrollment(db, notifications, result.enrollment);
   }
   return result;

@@ -189,7 +189,8 @@ export function loggingNotificationPort(
 
 // ─── Best effort ───
 // A Notification never fails the action that caused it. Call these after the
-// domain write commits: a failure is logged and swallowed, never retried.
+// domain write commits: a failure is logged and swallowed, never retried. Wrap
+// the lookups that build a Notification too, not just the send.
 
 export async function bestEffort(
   what: string,

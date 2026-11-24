@@ -29,6 +29,27 @@ export function createTestDb() {
 }
 
 /**
+ * The same database, except that a read outside a transaction throws, as if
+ * the database failed right after a domain write committed. For checking that
+ * the lookups a Notification needs never fail the action that caused it.
+ */
+export function withFailingReads<T extends ReturnType<typeof createTestDb>>(
+  testDb: T
+): T {
+  return new Proxy(testDb, {
+    get(target, property) {
+      if (property === "select") {
+        return () => {
+          throw new Error("Database read failed");
+        };
+      }
+      const value: unknown = Reflect.get(target, property, target);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+}
+
+/**
  * Seeds a minimal set of base data (user, category, course) that most tests need.
  * Returns the created IDs for use in test assertions.
  */

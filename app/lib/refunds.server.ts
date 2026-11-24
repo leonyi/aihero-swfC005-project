@@ -18,6 +18,7 @@ import {
   UserRole,
 } from "~/db/schema";
 import {
+  bestEffort,
   notify,
   type NotificationPort,
   type NotificationUser,
@@ -400,14 +401,16 @@ export async function raiseRefundRequest(
     .returning()
     .get();
 
-  await notifyRefundRequestRaised(
-    db,
-    notifications,
-    refundRequest.id,
-    toNotificationUser(buyer),
-    course.title,
-    purchase.amountPaid,
-    reason
+  await bestEffort(`notify Refund Request ${refundRequest.id} raised`, () =>
+    notifyRefundRequestRaised(
+      db,
+      notifications,
+      refundRequest.id,
+      toNotificationUser(buyer),
+      course.title,
+      purchase.amountPaid,
+      reason
+    )
   );
 
   return {
@@ -771,13 +774,15 @@ export async function approveRefundRequest(
   });
 
   if (result.ok) {
-    await notifyDecision(
-      db,
-      notifications,
-      refundRequestId,
-      platformAdminId,
-      RefundStatus.Approved,
-      note
+    await bestEffort(`notify Refund Request ${refundRequestId} approved`, () =>
+      notifyDecision(
+        db,
+        notifications,
+        refundRequestId,
+        platformAdminId,
+        RefundStatus.Approved,
+        note
+      )
     );
   }
   return result;
@@ -832,13 +837,15 @@ export async function declineRefundRequest(
   });
 
   if (result.ok) {
-    await notifyDecision(
-      db,
-      notifications,
-      refundRequestId,
-      platformAdminId,
-      RefundStatus.Declined,
-      trimmedNote
+    await bestEffort(`notify Refund Request ${refundRequestId} declined`, () =>
+      notifyDecision(
+        db,
+        notifications,
+        refundRequestId,
+        platformAdminId,
+        RefundStatus.Declined,
+        trimmedNote
+      )
     );
   }
   return result;

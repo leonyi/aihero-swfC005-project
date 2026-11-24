@@ -3,6 +3,7 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "~/db/schema";
 import { courses, enrollments } from "~/db/schema";
 import {
+  bestEffort,
   getNotificationUser,
   notify,
   type NotificationPort,
@@ -19,9 +20,20 @@ type Enrollment = typeof enrollments.$inferSelect;
 
 /**
  * New Enrollment → the course's Instructor, unless they enrolled themselves.
- * Call after the Enrollment commits.
+ * Call after the Enrollment commits. Never throws: a failed lookup or send is
+ * logged.
  */
-export async function notifyNewEnrollment(
+export function notifyNewEnrollment(
+  db: Db,
+  notifications: NotificationPort,
+  enrollment: Enrollment
+): Promise<void> {
+  return bestEffort(`notify New Enrollment ${enrollment.id}`, () =>
+    sendNewEnrollment(db, notifications, enrollment)
+  );
+}
+
+async function sendNewEnrollment(
   db: Db,
   notifications: NotificationPort,
   enrollment: Enrollment
