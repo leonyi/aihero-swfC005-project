@@ -37,15 +37,16 @@ async function buyAndRefund(buyerId: number) {
     .values({ name: "Pat", email: "pat@example.com", role: UserRole.Admin })
     .returning()
     .get();
-  const raised = raiseRefundRequest(
+  const raised = await raiseRefundRequest(
     db,
+    notifications,
     first.purchase.id,
     buyerId,
     "Not for me after all",
     NOW
   );
   if (!raised.ok) throw new Error(raised.error);
-  approveRefundRequest(db, raised.refundRequestId, platformAdmin.id, null, NOW);
+  await approveRefundRequest(db, notifications, raised.refundRequestId, platformAdmin.id, null, NOW);
 }
 
 describe("buyCourse", () => {

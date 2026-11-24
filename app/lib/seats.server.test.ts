@@ -90,7 +90,7 @@ describe("claimSeat", () => {
 
   it("refuses a Seat on hold while its Team Licence has an Open Refund Request", async () => {
     const { purchase, seats } = buySeats();
-    raiseRefundRequest(db, purchase.id, teamAdmin.id, "Team changed plans", NOW);
+    await raiseRefundRequest(db, notifications, purchase.id, teamAdmin.id, "Team changed plans", NOW);
 
     expect(await claim(seats[0].code, base.user.id)).toEqual({
       ok: false,
@@ -101,15 +101,16 @@ describe("claimSeat", () => {
   it("refuses a Seat whose Team Licence was refunded", async () => {
     const { purchase, seats } = buySeats();
     const platformAdmin = addPerson("Pat", UserRole.Admin);
-    const raised = raiseRefundRequest(
+    const raised = await raiseRefundRequest(
       db,
+      notifications,
       purchase.id,
       teamAdmin.id,
       "Team changed plans",
       NOW
     );
     if (!raised.ok) throw new Error(raised.error);
-    approveRefundRequest(db, raised.refundRequestId, platformAdmin.id, null, NOW);
+    await approveRefundRequest(db, notifications, raised.refundRequestId, platformAdmin.id, null, NOW);
 
     expect(await claim(seats[0].code, base.user.id)).toEqual({
       ok: false,
