@@ -14,6 +14,8 @@ import {
   QuestionType,
   TeamMemberRole,
 } from "../app/db/schema";
+import { getNotificationPort } from "../app/lib/notification-port.server";
+import { syncAllUsers } from "../app/lib/users.server";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -2852,6 +2854,14 @@ This course is still in draft while the cluster examples are rewritten against t
   console.log(
     `  Teams: ${countRows(schema.teams)}, coupons: ${countRows(schema.coupons)} (${countRows(schema.coupons, isNotNull(schema.coupons.redeemedByUserId))} redeemed)`
   );
+
+  // ─── Notification vendor ───
+  // Sync every seeded user (name, email, avatar, and default preferences for
+  // anyone who has none). Logged instead of sent without KNOCK_SECRET_API_KEY.
+  // Ids are reused after a reseed, so the vendor may already hold another
+  // person's preferences under an id; those are kept, not reset.
+  await syncAllUsers(db, getNotificationPort());
+  console.log(`Synced ${countRows(schema.users)} users to the Notification vendor.`);
 }
 
 seed().catch(console.error);
