@@ -17,11 +17,34 @@ import { db } from "~/db";
 import { eq } from "drizzle-orm";
 import { formatPrice } from "~/lib/utils";
 import { listRefundRequestsForBuyer } from "~/lib/refunds.server";
+import { getNotificationPort } from "~/lib/notification-port.server";
+import { updateProfile } from "~/lib/users.server";
+import {
+  listPreferenceSwitches,
+  setPreference,
+  type PreferenceSwitch,
+} from "~/lib/notification-preferences.server";
+import { Switch } from "~/components/ui/switch";
 
-const settingsSchema = z.object({
-  name: z.string().trim().min(1, "Name cannot be empty."),
-  bio: z.string().trim().optional(),
-});
+const settingsSchema = z.discriminatedUnion("intent", [
+  z.object({
+    intent: z.literal("profile"),
+    name: z.string().trim().min(1, "Name cannot be empty."),
+    bio: z.string().trim().optional(),
+  }),
+  z.object({
+    intent: z.literal("preference"),
+    category: z.enum([
+      "refund-request-updates",
+      "open-refund-requests",
+      "seat-claims",
+      "enrollments",
+      "discussion-questions",
+      "discussion-replies",
+    ]),
+    on: z.enum(["true", "false"]).transform((value) => value === "true"),
+  }),
+]);
 
 export function meta() {
   return [
@@ -50,6 +73,11 @@ export async function loader({ request }: Route.LoaderArgs) {
   }
 
   const refundRequests = listRefundRequestsForBuyer(db, currentUserId);
+  const notificationPreferences = await listPreferenceSwitches(
+    db,
+    getNotificationPort(),
+    currentUserId
+  );
 
   return {
     user: {
@@ -60,6 +88,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       role: currentUser.role,
     },
     refundRequests,
+    notificationPreferences,
   };
 }
 
@@ -70,15 +99,6 @@ export async function action({ request }: Route.ActionArgs) {
     throw data("You must be logged in.", { status: 401 });
   }
 
-  const currentUser = db
-    .select()
-    .from(users)
-    .where(eq(users.id, currentUserId))
-    .get();
-  if (!currentUser) {
-    throw data("User not found.", { status: 404 });
-  }
-
   const formData = await request.formData();
   const parsed = parseFormData(formData, settingsSchema);
 
@@ -86,19 +106,48 @@ export async function action({ request }: Route.ActionArgs) {
     return data({ errors: parsed.errors }, { status: 400 });
   }
 
+  if (parsed.data.intent === "preference") {
+    const { category, on } = parsed.data;
+    const result = await setPreference(
+      db,
+      getNotificationPort(),
+      currentUserId,
+      category,
+      on
+    );
+    if (!result.ok && result.reason === "not-applicable") {
+      throw data("That notification setting doesn't apply to you.", {
+        status: 403,
+      });
+    }
+    if (!result.ok) {
+      // A returned error, not a thrown one: the switch stays on the page and
+      // the person gets a toast instead of an error screen.
+      return data(
+        { preferenceError: "Couldn't save your notification setting. Try again." },
+        { status: 502 }
+      );
+    }
+    return { preferenceSaved: true };
+  }
+
   const { name, bio } = parsed.data;
 
-  db
-    .update(users)
-    .set({ name, email: currentUser.email, bio: bio || null })
-    .where(eq(users.id, currentUser.id))
-    .returning()
-    .get();
+  const updated = await updateProfile(
+    db,
+    getNotificationPort(),
+    currentUserId,
+    name,
+    bio || null
+  );
+  if (!updated) {
+    throw data("User not found.", { status: 404 });
+  }
   return { success: true };
 }
 
 export default function Settings({ loaderData }: Route.ComponentProps) {
-  const { user, refundRequests } = loaderData;
+  const { user, refundRequests, notificationPreferences } = loaderData;
   const openCount = refundRequests.filter(
     (refundRequest) => refundRequest.status === RefundStatus.Open
   ).length;
@@ -139,6 +188,7 @@ export default function Settings({ loaderData }: Route.ComponentProps) {
         </CardHeader>
         <CardContent>
           <fetcher.Form method="post" className="space-y-4">
+            <input type="hidden" name="intent" value="profile" />
             <div className="space-y-2">
               <Label htmlFor="name">Name</Label>
               <Input
@@ -185,6 +235,26 @@ export default function Settings({ loaderData }: Route.ComponentProps) {
               {fetcher.state !== "idle" ? "Saving..." : "Save Changes"}
             </Button>
           </fetcher.Form>
+        </CardContent>
+      </Card>
+
+      <Card className="mt-8 max-w-md">
+        <CardHeader>
+          <h2 className="text-lg font-semibold">Notifications</h2>
+          <p className="text-sm text-muted-foreground">
+            {notificationPreferences.available
+              ? "Choose what shows up in your Notification Feed."
+              : "Your notification settings can't be loaded right now."}
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {notificationPreferences.switches.map((preference) => (
+            <PreferenceToggle
+              key={preference.category}
+              preference={preference}
+              disabled={!notificationPreferences.available}
+            />
+          ))}
         </CardContent>
       </Card>
 
@@ -235,6 +305,53 @@ export default function Settings({ loaderData }: Route.ComponentProps) {
           </CardContent>
         </Card>
       )}
+    </div>
+  );
+}
+
+/** One switch that saves as soon as it's flipped. */
+function PreferenceToggle({
+  preference,
+  disabled,
+}: {
+  preference: PreferenceSwitch;
+  disabled: boolean;
+}) {
+  const fetcher = useFetcher<typeof action>({
+    key: `preference-${preference.category}`,
+  });
+  const pending = fetcher.formData?.get("on");
+  const on = typeof pending === "string" ? pending === "true" : preference.on;
+  const id = `preference-${preference.category}`;
+
+  useEffect(() => {
+    if (
+      fetcher.state === "idle" &&
+      fetcher.data &&
+      "preferenceError" in fetcher.data
+    ) {
+      toast.error(fetcher.data.preferenceError);
+    }
+  }, [fetcher.state, fetcher.data]);
+
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <Label htmlFor={id}>{preference.label}</Label>
+      <Switch
+        id={id}
+        checked={on}
+        disabled={disabled}
+        onCheckedChange={(checked) =>
+          fetcher.submit(
+            {
+              intent: "preference",
+              category: preference.category,
+              on: String(checked),
+            },
+            { method: "post" }
+          )
+        }
+      />
     </div>
   );
 }
