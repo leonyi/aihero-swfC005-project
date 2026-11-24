@@ -2,11 +2,12 @@ import { and, eq, isNull } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "~/db/schema";
 import { coupons, courses, enrollments, purchases } from "~/db/schema";
+import { notifyNewEnrollment } from "~/lib/enrollment-notifications.server";
 import {
   getNotificationUser,
-  notifyNewEnrollment,
-} from "~/lib/enrollment-notifications.server";
-import { notify, type NotificationPort } from "~/lib/notifications.server";
+  notify,
+  type NotificationPort,
+} from "~/lib/notifications.server";
 import { getSeatAvailability } from "~/lib/refunds.server";
 
 // ─── Seats ───

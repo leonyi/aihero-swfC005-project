@@ -1,3 +1,8 @@
+import { eq } from "drizzle-orm";
+import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
+import * as schema from "~/db/schema";
+import { users } from "~/db/schema";
+
 // ─── Notifications ───
 // Cadence tells a person something that concerns them happened. The domain
 // services decide who gets which Notification and with what data; they hand it
@@ -20,6 +25,23 @@ export type NotificationUser = {
   email: string;
   avatarUrl: string | null;
 };
+
+/** The person as a Notification's recipient or sender, or undefined if gone. */
+export function getNotificationUser(
+  db: BetterSQLite3Database<typeof schema>,
+  userId: number
+): NotificationUser | undefined {
+  return db
+    .select({
+      id: users.id,
+      name: users.name,
+      email: users.email,
+      avatarUrl: users.avatarUrl,
+    })
+    .from(users)
+    .where(eq(users.id, userId))
+    .get();
+}
 
 /**
  * Where clicking the Notification goes, or null when there's nowhere to go

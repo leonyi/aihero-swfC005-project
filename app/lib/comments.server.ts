@@ -1,14 +1,14 @@
 import { eq } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "~/db/schema";
-import { comments, courses, lessons, modules, users } from "~/db/schema";
+import { comments, courses, lessons, modules } from "~/db/schema";
 import { MAX_COMMENT_LENGTH, MIN_COMMENT_LENGTH } from "~/lib/comments";
 import {
   bestEffort,
+  getNotificationUser,
   notify,
   snippetOf,
   type NotificationPort,
-  type NotificationUser,
 } from "~/lib/notifications.server";
 
 // ─── Comments ───
@@ -52,22 +52,6 @@ function getLessonWithCourse(
     .innerJoin(modules, eq(lessons.moduleId, modules.id))
     .innerJoin(courses, eq(modules.courseId, courses.id))
     .where(eq(lessons.id, lessonId))
-    .get();
-}
-
-function getNotificationUser(
-  db: Db,
-  userId: number
-): NotificationUser | undefined {
-  return db
-    .select({
-      id: users.id,
-      name: users.name,
-      email: users.email,
-      avatarUrl: users.avatarUrl,
-    })
-    .from(users)
-    .where(eq(users.id, userId))
     .get();
 }
 

@@ -1,11 +1,11 @@
 import { eq } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "~/db/schema";
-import { courses, enrollments, users } from "~/db/schema";
+import { courses, enrollments } from "~/db/schema";
 import {
+  getNotificationUser,
   notify,
   type NotificationPort,
-  type NotificationUser,
 } from "~/lib/notifications.server";
 
 // ─── New Enrollment Notification ───
@@ -16,22 +16,6 @@ import {
 
 type Db = BetterSQLite3Database<typeof schema>;
 type Enrollment = typeof enrollments.$inferSelect;
-
-export function getNotificationUser(
-  db: Db,
-  userId: number
-): NotificationUser | undefined {
-  return db
-    .select({
-      id: users.id,
-      name: users.name,
-      email: users.email,
-      avatarUrl: users.avatarUrl,
-    })
-    .from(users)
-    .where(eq(users.id, userId))
-    .get();
-}
 
 /**
  * New Enrollment → the course's Instructor, unless they enrolled themselves.
