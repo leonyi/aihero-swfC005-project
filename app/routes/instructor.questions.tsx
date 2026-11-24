@@ -6,6 +6,7 @@ import type { Route } from "./+types/instructor.questions";
 import { requireInstructorOrAdmin, requireStaff } from "~/lib/access.server";
 import { renderComment } from "~/lib/comment-markdown.server";
 import { createComment } from "~/lib/comments.server";
+import { getNotificationPort } from "~/lib/notification-port.server";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent } from "~/components/ui/card";
 import { Skeleton } from "~/components/ui/skeleton";
@@ -171,8 +172,9 @@ export async function action({ request }: Route.ActionArgs) {
     throw data("Select a user from the DevUI panel.", { status: 401 });
   }
 
-  const created = createComment(
+  const created = await createComment(
     db,
+    getNotificationPort(),
     userId,
     question.lessonId,
     question.id,

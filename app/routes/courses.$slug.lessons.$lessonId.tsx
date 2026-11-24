@@ -6,6 +6,7 @@ import { getCurrentUserId } from "~/lib/session";
 import { getAccess, requireContentAccess } from "~/lib/access.server";
 import { renderComment } from "~/lib/comment-markdown.server";
 import { createComment, deleteComment } from "~/lib/comments.server";
+import { getNotificationPort } from "~/lib/notification-port.server";
 import {
   CommentThread,
   type RenderedComment,
@@ -850,8 +851,9 @@ export async function action({ params, request }: Route.ActionArgs) {
         if (!parsed.success) {
           return { ok: false, error: "Enter a comment before posting." };
         }
-        const created = createComment(
+        const created = await createComment(
           db,
+          getNotificationPort(),
           currentUserId,
           lessonId,
           parsed.data.parentId ?? null,

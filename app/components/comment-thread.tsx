@@ -225,7 +225,11 @@ function CommentItem({
   }
 
   return (
-    <div className={cn("py-3", isReply && "border-l pl-4")}>
+    // `#comment-<id>` is where a Notification about this comment links to.
+    <div
+      id={`comment-${comment.id}`}
+      className={cn("scroll-mt-4 py-3", isReply && "border-l pl-4")}
+    >
       <div className="flex items-start gap-3">
         <UserAvatar
           name={comment.author.name}
