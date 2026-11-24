@@ -62,6 +62,14 @@ type RefundData = LinkTarget & {
   amount: number;
 };
 
+/** A decided Refund Request names the Purchase it was for. */
+type DecisionData = RefundData & {
+  purchaseId: number;
+  /** When the Purchase was made, as an ISO timestamp. */
+  purchasedAt: string;
+  decisionNote: string | null;
+};
+
 /**
  * The data each Notification kind carries. The Notification Feed renders its
  * row from this data, so it is a snapshot taken when the Notification is sent.
@@ -70,8 +78,8 @@ type RefundData = LinkTarget & {
  */
 export type NotificationDataByKind = {
   "refund-request-confirmed": RefundData & { reason: string };
-  "refund-request-approved": RefundData & { decisionNote: string | null };
-  "refund-request-declined": RefundData & { decisionNote: string | null };
+  "refund-request-approved": DecisionData;
+  "refund-request-declined": DecisionData;
   "open-refund-request": RefundData & { reason: string };
   "seat-claimed": LinkTarget & { courseTitle: string; seatsLeft: number };
   "new-enrollment": LinkTarget & { courseTitle: string };

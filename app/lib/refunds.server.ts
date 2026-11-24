@@ -889,6 +889,8 @@ async function notifyDecision(
     data: {
       courseTitle: row.courseTitle,
       amount: row.purchase.amountPaid,
+      purchaseId: row.purchase.id,
+      purchasedAt: row.purchase.createdAt,
       decisionNote,
       url,
     },

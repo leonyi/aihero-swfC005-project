@@ -35,7 +35,12 @@ const discussion = z.object({
   commentId: z.number(),
 });
 const refund = { ...linkTarget, courseTitle: z.string(), amount: z.number() };
-const decision = z.object({ ...refund, decisionNote: z.string().nullable() });
+const decision = z.object({
+  ...refund,
+  purchaseId: z.number(),
+  purchasedAt: z.string(),
+  decisionNote: z.string().nullable(),
+});
 const withReason = z.object({ ...refund, reason: z.string() });
 
 const DATA_SCHEMAS: {

@@ -44,6 +44,16 @@ export type FeedRow = {
 
 const quote = (text: string) => `“${text}”`;
 
+/** "Purchase #12 of Oct 3, 2026": which Purchase a decision was about. */
+function purchaseOf(data: { purchaseId: number; purchasedAt: string }) {
+  const day = new Date(data.purchasedAt).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+  return `Purchase #${data.purchaseId} of ${day}`;
+}
+
 export function describeNotification(notification: FeedNotification): FeedRow {
   const sender = notification.actor?.name ?? "Someone";
   switch (notification.kind) {
@@ -86,21 +96,21 @@ export function describeNotification(notification: FeedNotification): FeedRow {
         snippet: `${notification.data.courseTitle} · A Platform Admin will review it.`,
       };
     case "refund-request-approved": {
-      const note = notification.data.decisionNote;
+      const { courseTitle, amount, decisionNote } = notification.data;
+      const note = decisionNote ? ` ${quote(decisionNote)}` : "";
       return {
         category: "refund",
         title: "Your Refund Request was approved",
-        snippet: note
-          ? `${notification.data.courseTitle} · ${quote(note)}`
-          : `${notification.data.courseTitle} · ${formatPrice(notification.data.amount)} is on its way.`,
+        snippet: `${courseTitle} · ${purchaseOf(notification.data)} · ${formatPrice(amount)} is on its way.${note}`,
       };
     }
     case "refund-request-declined": {
-      const note = notification.data.decisionNote;
+      const { courseTitle, decisionNote } = notification.data;
+      const note = decisionNote ? `${quote(decisionNote)} ` : "";
       return {
         category: "refund",
         title: "Your Refund Request was declined",
-        snippet: `${notification.data.courseTitle} · ${note ? `${quote(note)} ` : ""}You can ask again.`,
+        snippet: `${courseTitle} · ${purchaseOf(notification.data)} · ${note}You can ask again.`,
       };
     }
   }

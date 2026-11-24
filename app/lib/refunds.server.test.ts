@@ -620,6 +620,8 @@ describe("Refund Request Notifications", () => {
         data: {
           courseTitle: "Test Course",
           amount: 7900,
+          purchaseId: purchase.id,
+          purchasedAt: purchase.createdAt,
           decisionNote: "Sorry it didn't suit.",
           url: "/settings",
         },
@@ -645,6 +647,8 @@ describe("Refund Request Notifications", () => {
         data: {
           courseTitle: "Test Course",
           amount: 15800,
+          purchaseId: purchase.id,
+          purchasedAt: purchase.createdAt,
           decisionNote: "Seats are booked.",
           url: "/team",
         },

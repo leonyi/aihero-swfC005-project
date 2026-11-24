@@ -145,6 +145,60 @@ describe("describeNotification", () => {
   });
 });
 
+describe("describing a Refund Request decision", () => {
+  function decision(
+    kind: "refund-request-approved" | "refund-request-declined",
+    decisionNote: string | null
+  ): FeedNotification {
+    return {
+      id: "d1",
+      kind,
+      insertedAt: at(1),
+      readAt: null,
+      seenAt: null,
+      actor: { name: "Pat Admin", avatarUrl: null },
+      data: {
+        courseTitle: "Intro to Testing",
+        amount: 4900,
+        purchaseId: 12,
+        purchasedAt: "2026-10-03T12:00:00.000Z",
+        decisionNote,
+        url: "/settings",
+      },
+    };
+  }
+
+  it("names the Purchase and the amount of an approved refund", () => {
+    expect(describeNotification(decision("refund-request-approved", null))).toEqual({
+      category: "refund",
+      title: "Your Refund Request was approved",
+      snippet: "Intro to Testing · Purchase #12 of Oct 3, 2026 · $49.00 is on its way.",
+    });
+  });
+
+  it("keeps the amount of an approved refund when there is a note", () => {
+    expect(
+      describeNotification(decision("refund-request-approved", "Sorry it didn't suit."))
+    ).toEqual({
+      category: "refund",
+      title: "Your Refund Request was approved",
+      snippet:
+        "Intro to Testing · Purchase #12 of Oct 3, 2026 · $49.00 is on its way. “Sorry it didn't suit.”",
+    });
+  });
+
+  it("names the Purchase of a declined refund and quotes the note", () => {
+    expect(
+      describeNotification(decision("refund-request-declined", "Seats are booked."))
+    ).toEqual({
+      category: "refund",
+      title: "Your Refund Request was declined",
+      snippet:
+        "Intro to Testing · Purchase #12 of Oct 3, 2026 · “Seats are booked.” You can ask again.",
+    });
+  });
+});
+
 describe("without Knock keys", () => {
   it("shows the empty state and no badge", async () => {
     const feed = createNotificationFeed(emptyNotificationFeedClient);
