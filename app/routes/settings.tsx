@@ -115,18 +115,14 @@ export async function action({ request }: Route.ActionArgs) {
       category,
       on
     );
-    if (!result.ok && result.reason === "not-applicable") {
-      throw data("That notification setting doesn't apply to you.", {
-        status: 403,
-      });
+    if (!result.ok && result.status === 403) {
+      throw data(result.error, { status: 403 });
     }
     if (!result.ok) {
-      // A returned error, not a thrown one: the switch stays on the page and
-      // the person gets a toast instead of an error screen.
-      return data(
-        { preferenceError: "Couldn't save your notification setting. Try again." },
-        { status: 502 }
-      );
+      // A returned error, not a thrown one, so the switch stays on the page and
+      // the person gets a toast instead of an error screen. See
+      // docs/adr/0013-a-failed-fetcher-save-returns-an-error-value.md.
+      return data({ preferenceError: result.error }, { status: result.status });
     }
     return { preferenceSaved: true };
   }

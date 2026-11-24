@@ -108,7 +108,7 @@ export async function listPreferenceSwitches(
 
 export type SetPreferenceResult =
   | { ok: true }
-  | { ok: false; reason: "not-applicable" | "save-failed" };
+  | { ok: false; status: 403 | 502; error: string };
 
 /**
  * Saves one flipped switch (the feed channel) by merging it into the person's
@@ -124,7 +124,11 @@ export async function setPreference(
   on: boolean
 ): Promise<SetPreferenceResult> {
   if (!applicableCategories(db, userId).includes(category)) {
-    return { ok: false, reason: "not-applicable" };
+    return {
+      ok: false,
+      status: 403,
+      error: "That notification setting doesn't apply to you.",
+    };
   }
   try {
     await notifications.mergePreferences(userId, { [category]: { feed: on } });
@@ -134,6 +138,10 @@ export async function setPreference(
       `[notifications] save ${category} preference for user ${userId} failed`,
       error
     );
-    return { ok: false, reason: "save-failed" };
+    return {
+      ok: false,
+      status: 502,
+      error: "Couldn't save your notification setting. Try again.",
+    };
   }
 }

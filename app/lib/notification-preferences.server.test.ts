@@ -225,7 +225,11 @@ describe("setPreference", () => {
       false
     );
 
-    expect(result).toEqual({ ok: false, reason: "not-applicable" });
+    expect(result).toEqual({
+      ok: false,
+      status: 403,
+      error: "That notification setting doesn't apply to you.",
+    });
     expect(notifications.preferences.get(base.user.id)).toBeUndefined();
   });
 
@@ -238,6 +242,10 @@ describe("setPreference", () => {
       false
     );
 
-    expect(result).toEqual({ ok: false, reason: "save-failed" });
+    expect(result).toEqual({
+      ok: false,
+      status: 502,
+      error: "Couldn't save your notification setting. Try again.",
+    });
   });
 });
